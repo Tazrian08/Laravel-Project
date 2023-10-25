@@ -1,0 +1,357 @@
+1) https://www.youtube.com/watch?v=Ev-U9FiKlXQ  everything in link comments(also given below)
+2) Get paypal sanbox cliend ID and secret from paypal account
+
+
+
+The Source Code Here :
+
+Paypal payment gateway integration in Laravel 
+
+
+
+
+
+
+
+		1. Laravel new paypalPayment
+
+
+
+		2.composer require srmklive/paypal
+
+
+
+		3.php artisan vendor:publish --provider "Srmklive\PayPal\Providers\PayPalServiceProvider"
+
+
+
+		4.Go to .env and change something
+
+
+
+		5. Create Controller
+
+
+
+		6.Create View
+
+
+
+		7.create route
+
+
+=================   In the .env file write this down :   =================
+
+PAYPAL_MODE=sandbox
+
+PAYPAL_SANDBOX_CLIENT_ID=
+
+PAYPAL_SANDBOX_CLIENT_SECRET=
+
+PAYPAL_LIVE_CLIENT_ID=
+
+PAYPAL_LIVE_CLIENT_SECRET=
+
+
+
+============  create a controller PaypalController by writting this command ===============
+
+php artisan make:controller PaypalController
+
+
+======================  create the view paypal_view.blade.php   =====================
+
+
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+	<meta charset="utf-8">
+
+	<title></title>
+
+
+
+	<link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css">
+
+
+
+
+
+	<script src="https://www.paypal.com/sdk/js?client-id={{env('PAYPAL_SANDBOX_CLIENT_ID')}}"></script>
+
+
+
+</head>
+
+<body>
+
+
+
+
+
+	<a class="btn btn-primary" href="{{route('processPaypal')}}">Pay 100$</a>
+
+
+
+
+
+	@if(\Session::has('error'))
+
+        <div class="alert alert-danger">{{ \Session::get('error') }}</div>
+
+        {{ \Session::forget('error') }}
+
+    @endif
+
+
+
+    
+
+    @if(\Session::has('success'))
+
+        <div class="alert alert-success">{{ \Session::get('success') }}</div>
+
+        {{ \Session::forget('success') }}
+
+    @endif
+
+
+
+</body>
+
+</html>
+
+
+
+
+======================== write down the route in the web.php    ===================
+
+
+<?php
+
+
+
+use Illuminate\Support\Facades\Route;
+
+
+
+use App\Http\Controllers\PaypalController;
+
+
+
+
+
+Route::get('/', function () {
+
+    return view('welcome');
+
+});
+
+
+
+
+
+route::get('createpaypal',[PaypalController::class,'createpaypal'])->name('createpaypal');
+
+
+
+route::get('processPaypal',[PaypalController::class,'processPaypal'])->name('processPaypal');
+
+
+
+route::get('processSuccess',[PaypalController::class,'processSuccess'])->name('processSuccess');
+
+
+
+route::get('processCancel',[PaypalController::class,'processCancel'])->name('processCancel');
+
+
+
+
+
+
+
+
+=================  this is  the PaypalController Code  =============================
+
+
+
+
+<?php
+
+
+
+namespace App\Http\Controllers;
+
+
+
+use Illuminate\Http\Request;
+
+
+
+use Srmklive\PayPal\Services\PayPal as PayPalClient;
+
+
+
+
+
+class PaypalController extends Controller
+
+{
+
+   public function createpaypal()
+
+   {
+
+    return view('paypal_view');
+
+   }
+
+
+
+
+
+public function processPaypal(Request $request)
+
+{
+
+    $provider = new PayPalClient;
+
+        $provider->setApiCredentials(config('paypal'));
+
+        $paypalToken = $provider->getAccessToken();
+
+
+
+        $response = $provider->createOrder([
+
+            "intent" => "CAPTURE",
+
+            "application_context" => [
+
+                "return_url" => route('processSuccess'),
+
+                "cancel_url" => route('processCancel'),
+
+            ],
+
+            "purchase_units" => [
+
+                0 => [
+
+                    "amount" => [
+
+                        "currency_code" => "USD",
+
+                        "value" => "100.00"
+
+                    ]
+
+                ]
+
+            ]
+
+        ]);
+
+
+
+        if (isset($response['id']) && $response['id'] != null) {
+
+
+
+            // redirect to approve href
+
+            foreach ($response['links'] as $links) {
+
+                if ($links['rel'] == 'approve') {
+
+                    return redirect()->away($links['href']);
+
+                }
+
+            }
+
+
+
+            return redirect()
+
+                ->route('createpaypal')
+
+                ->with('error', 'Something went wrong.');
+
+
+
+        } else {
+
+            return redirect()
+
+                ->route('createpaypal')
+
+                ->with('error', $response['message'] ?? 'Something went wrong.');
+
+        }
+
+}
+
+
+
+
+
+public function processSuccess(Request $request)
+
+{
+
+
+
+        $provider = new PayPalClient;
+
+        $provider->setApiCredentials(config('paypal'));
+
+        $provider->getAccessToken();
+
+        $response = $provider->capturePaymentOrder($request['token']);
+
+
+
+        if (isset($response['status']) && $response['status'] == 'COMPLETED') {
+
+            return redirect()
+
+                ->route('createpaypal')
+
+                ->with('success', 'Transaction complete.');
+
+        } else {
+
+            return redirect()
+
+                ->route('createpaypal')
+
+                ->with('error', $response['message'] ?? 'Something went wrong.');
+
+        }
+
+
+
+}
+
+
+
+ public function processCancel(Request $request)
+
+    {
+
+        return redirect()
+
+            ->route('createpaypal')
+
+            ->with('error', $response['message'] ?? 'You have canceled the transaction.');
+
+    }
+
+
+
+}
